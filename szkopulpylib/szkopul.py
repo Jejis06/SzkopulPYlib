@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup as bs
 import time
-
+from render_html import render_in_browser as ren
 
 class SkClient:
     def __init__(self,login=None,password=None,url=None):
@@ -10,6 +10,7 @@ class SkClient:
         :param:passowrd - haslo do szkopula
         :param:url - link do strony glownej zajec na szkopule
         '''
+        self.ids = []
         if login is not None:
             self.login = login
         if password is not None:
@@ -41,13 +42,14 @@ class SkClient:
         headers = {
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36",
             "referer": self.url
-
         }
 
         rq = requests.session()
         rq.headers.update(headers)
 
         token = rq.get(self.url)
+        if token.status_code != 200:
+            raise Exception("Error while getting token. Check your login and password.")
 
         if 'csrftoken' in token.cookies:
             csrftoken = token.cookies['csrftoken']
@@ -87,12 +89,9 @@ class SkClient:
 
 
         res = rq.post(url=self.url,data=payload)
-
-
-
         zupa = bs(res.content,features="html.parser")
-        
-        con = zupa.find('section',class_="col-md-9 col-lg-10 main-content").find('tbody')
+
+        con = zupa.find('section',class_="col-lg-9 col-xl-10 main-content").find('tbody')
 
         links = []
         for i in con.find_all('tr', class_=None):
@@ -100,8 +99,8 @@ class SkClient:
             zad = []
             for j in i.find_all('td',class_="text-right"):
                 for jj in j.find_all('a'):
-                    links.append(jj['href'])
-
+                    if "submit" in jj['href']:
+                        links.append(jj['href'])
 
 
        
@@ -133,20 +132,22 @@ class SkClient:
                     zad.append(link)
                 zad.append(uou)
 
-                
-                
                 pot += 1
             zadania.append(zad)
             poo += 1
+        for i in range(len(zadania)):
+            if zadania[i][5] == '':
+                zadania[i][5] = 0
+            else:
+                zadania[i][5] = int(zadania[i][5])
 
         #rozdzialy
-        if (only_not_completed == True):
+        if only_not_completed == True:
             o = []
             for i in zadania:
-                if (int(i[5]) != 100):
+                if i[5] != 100:
                     o.append(i)
             return o
-
         else:
             return zadania
 
@@ -180,8 +181,6 @@ class SkClient:
 
             rq = self.session
 
-
-
             payload = {
                 "csrfmiddlewaretoken": f"{self.csrftoken}",
                 "login_view-current_step": "auth",
@@ -189,32 +188,7 @@ class SkClient:
                 "auth-password": self.password
 
             }
-
-            res = rq.post(url=self.url, data=payload)
-
-            zupa = bs(res.content, features="html.parser")
-
-            con = zupa.find('section', class_="col-md-9 col-lg-10 main-content").find('tbody')
-
-            idis = []
-            for i in con.find_all('tr', class_=None):
-                pot = 0
-                zad = []
-                for j in i.find_all('td', class_="text-right"):
-                    for jj in j.find_all('a'):
-                        l = ""
-                        asd = jj['href']
-                        for i in asd:
-                            try :
-                                if(int(i) <= 9):
-                                    l+=i
-                            except :
-                                None
-                        idis.append(int(l))
-
-
-            #prog_lang_
-
+            _ = rq.post(url=self.url, data=payload)
             token = rq.get(self.url)
 
             if 'csrftoken' in token.cookies:
@@ -227,24 +201,13 @@ class SkClient:
                 "problem_instance_id":idtofind,
                 "file":"(binary)",
                 "code":p,
-
-
+                f"prog_lang_{idtofind}":f"{filetype}"
             }
-            #idtofind
-            for i in range(len(idis)):
-
-                if (int(idtofind) == idis[i]):
-                    payload[f"prog_lang_{idis[i]}"] = f"{filetype}"
-                else:
-                    payload[f"prog_lang_{idis[i]}"] = ""
-
-            #print(payload)
             re_u = rq.post(url=link, data=payload)
-            #print(re_u.status_code)
             zupa = bs(re_u.content, features="html.parser")
-            #print(zupa.prettify())
 
             return re_u.status_code
+        return 404
 
     def CheckLatest(self,all=False):
         '''
@@ -280,7 +243,7 @@ class SkClient:
             output = []
             o = ""
             serch_E = bs(data.content, features="html.parser")
-            sekcja = serch_E.find('section', class_="col-md-9 col-lg-10 main-content").find('tbody', class_=None).find_all('tr',class_=None)[0].find_all('td')#[5].text
+            sekcja = serch_E.find('section', class_="col-lg-9 col-xl-10 main-content").find('tbody', class_=None).find_all('tr',class_=None)[0].find_all('td')#[5].text
 
             gg = True
             for i in sekcja:
@@ -333,7 +296,7 @@ class SkClient:
                 output = []
                 o = ""
                 serch_E = bs(data.content, features="html.parser")
-                sekcja = serch_E.find('section', class_="col-md-9 col-lg-10 main-content").find('tbody', class_=None).find_all('tr',class_=None)  # [5].text
+                sekcja = serch_E.find('section', class_="col-lg-9 col-xl-10 main-content").find('tbody', class_=None).find_all('tr',class_=None)  # [5].text
 
                 for hh in sekcja:
                     gg = True
@@ -413,12 +376,11 @@ class SkClient:
         zupa = bs(data.content,features='html.parser')
         tabela = []
         glob_table = []
-        tab = zupa.find('table',class_="table table-ranking table-striped table-condensed submission").find('tbody').find_all('tr')
+        tab = zupa.find('table',class_="table table-ranking table-striped table-sm submission").find('tbody').find_all('tr')
         for i in tab:
-            pipn = i.find_all('td', class_="text-right")
+            pipn = i.find_all('td', class_="text-right sum-cell")
             user = i.find('td',class_="user-cell").text
             eee= i.find_all('td')
-            #print(eee)
             for i in eee:
                 pp = i.find('span')
                 if (pp != None):
@@ -432,11 +394,12 @@ class SkClient:
             tabela.append(ez)
             tabela.append(names)
             iss = pipn[len(pipn)-1]
+
             ezs = ""
             for j in iss.text:
                 if (iss != '\n' or iss != " "):
                     ezs += j
-            tabela.append(ezs)
+            tabela.append(int(ezs))
             glob_table.append(tabela)
             tabela = []
 
